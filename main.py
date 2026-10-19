@@ -1,4 +1,87 @@
-st.subheader("2. 2차원 산점도")
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+
+DATA_URL = "https://raw.githubusercontent.com/it-teacher-go/data-share-/main/kobis_movies.csv"
+
+st.set_page_config(page_title="영화 유형 나누기", page_icon="🎬", layout="wide")
+st.title("🎬 영화 유형 나누기")
+st.caption("영화의 특성을 바탕으로 비슷한 영화끼리 세 유형으로 묶습니다.")
+
+FEATURE_LABELS = {
+    "log_first_scrn": "스크린 수(상용로그)",
+    "log_total_audi": "누적 관객(상용로그)",
+    "days_in_top10": "10위권 일수",
+    "longrun_index": "롱런 지수",
+}
+RAW_LABELS = {
+    "first_scrn": "스크린 수 평균",
+    "total_audi": "누적 관객 평균",
+    "days_in_top10": "10위권 일수 평균",
+    "longrun_index": "롱런 지수 평균",
+}
+FEATURES = list(FEATURE_LABELS.keys())
+
+@st.cache_data(ttl=3600)
+def load_data():
+    return pd.read_csv(DATA_URL, encoding="utf-8")
+
+try:
+    original = load_data()
+except Exception as e:
+    st.error(f"데이터를 불러오지 못했습니다: {e}")
+    st.stop()
+    required = [
+    "movieCd", "movieNm", "openDt", "genre", "nation", "first_scrn",
+    "first_show", "first_date", "peak", "first_week_audi",
+    "total_audi", "days_in_top10",
+]
+missing = [c for c in required if c not in original.columns]
+if missing:
+    st.error("데이터에 필요한 열이 없습니다: " + ", ".join(missing))
+    st.stop()
+
+df = original.copy()
+for c in ["first_scrn", "first_week_audi", "total_audi", "days_in_top10"]:
+    df[c] = pd.to_numeric(df[c], errors="coerce")
+
+total_count = len(df)
+valid = (
+    df["first_scrn"].notna()
+    & df["first_week_audi"].notna()
+    & df["total_audi"].notna()
+    & df["days_in_top10"].notna()
+    & (df["first_scrn"] > 0)
+    & (df["first_week_audi"] > 0)
+    & (df["total_audi"] > 0)
+)
+work = df.loc[valid].copy()
+work["log_first_scrn"] = np.log10(work["first_scrn"])
+work["log_total_audi"] = np.log10(work["total_audi"])
+work["longrun_index"] = (work["total_audi"] / work["first_week_audi"]).clip(upper=20)
+
+st.markdown(
+    f"**전체 영화:** {total_count:,}편　|　**묶은 영화:** {len(work):,}편"
+)
+
+if len(work) < 3:
+    st.warning("분석 조건을 만족하는 영화가 3편 미만이라 분류할 수 없습니다.")
+    st.stop()
+
+st.subheader("1. 유형 분류에 사용할 속성")
+selected_features = st.multiselect(
+    "두 개 이상 선택하세요. 기본값은 네 속성 모두입니다.",
+    options=FEATURES,
+    default=FEATURES,
+    format_func=lambda x: FEATURE_LABELS[x],
+)
+if len(selected_features) < 2:
+    st.info("K-평균 분류를 하려면 속성을 두 개 이상 선택해 주세요.")
+    st.stop()
+    st.subheader("2. 2차원 산점도")
 col_x, col_y = st.columns(2)
 with col_x:
     x_feature = st.selectbox(
