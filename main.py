@@ -1,3 +1,4 @@
+import plotly.express as px
 fig2 = px.scatter(
     work,
     x=x_feature,
