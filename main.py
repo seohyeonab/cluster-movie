@@ -34,7 +34,8 @@ try:
 except Exception as e:
     st.error(f"데이터를 불러오지 못했습니다: {e}")
     st.stop()
-    required = [
+
+required = [
     "movieCd", "movieNm", "openDt", "genre", "nation", "first_scrn",
     "first_show", "first_date", "peak", "first_week_audi",
     "total_audi", "days_in_top10",
@@ -57,7 +58,7 @@ valid = (
     & (df["first_scrn"] > 0)
     & (df["first_week_audi"] > 0)
     & (df["total_audi"] > 0)
-)
+    )
 work = df.loc[valid].copy()
 work["log_first_scrn"] = np.log10(work["first_scrn"])
 work["log_total_audi"] = np.log10(work["total_audi"])
@@ -81,7 +82,19 @@ selected_features = st.multiselect(
 if len(selected_features) < 2:
     st.info("K-평균 분류를 하려면 속성을 두 개 이상 선택해 주세요.")
     st.stop()
-    st.subheader("2. 2차원 산점도")
+
+scaler = StandardScaler()
+scaled = scaler.fit_transform(work[selected_features].astype(float))
+model = KMeans(n_clusters=3, random_state=42, n_init=10)
+work["cluster_raw"] = model.fit_predict(scaled)
+
+cluster_order = (
+    work.groupby("cluster_raw")["total_audi"].mean().sort_values(ascending=False).index.tolist()
+)
+name_map = {cluster_id: ["㉮", "㉯", "㉰"][i] for i, cluster_id in enumerate(cluster_order)}
+work["유형"] = work["cluster_raw"].map(name_map)
+
+st.subheader("2. 2차원 산점도")
 col_x, col_y = st.columns(2)
 with col_x:
     x_feature = st.selectbox(
@@ -139,7 +152,7 @@ else:
             "longrun_index": ":.2f",
             "유형": True,
         },
-        labels={**FEATURE_LABELS, "유형": "영화 유형", "movieNm": "영화 제목"},
+    labels={**FEATURE_LABELS, "유형": "영화 유형", "movieNm": "영화 제목"},
         title="세 속성으로 살펴보는 영화 유형",
     )
     fig3.update_traces(marker={"size": 3, "opacity": 0.8})
